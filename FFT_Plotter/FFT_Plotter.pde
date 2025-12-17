@@ -1,19 +1,24 @@
 import java.util.LinkedList;
+import java.util.ArrayList;
 import java.util.List;
+
+
 final int ERASE_RADIUS=0;
 final int GRAD_BOUND=10000;
-final int MAX_DIST=100;
+final int MAX_DIST=80;
+
+
 //定义复数点数组
 List<Complex> allPoints= new LinkedList();
 List<Complex> sortedAllPoints= new LinkedList();
 // List<List<Complex>> points=new LinkedList();
 
-List<List<Complex>> sortedPoints=new LinkedList();
+List<List<Complex>> sortedPoints=new ArrayList();
 void setup(){
     //加载图片像素(不要我写这个函数真是太好了)
     PImage img= loadImage("../img/Tester3.jpg");
     img.loadPixels();
-    img.resize(ceil(img.width/2), ceil(img.height/2));
+    img.resize(ceil(img.width/1.5), ceil(img.height/1.5));
     // size(img.width,img.height);
     surface.setSize(img.width, img.height);
 
@@ -132,7 +137,7 @@ void setup(){
     print(allPoints.size());
     //接下来是为了防止联通不同图像的切分
     for(int i=0;i<sortedAllPoints.size();i++){
-        List<Complex> sortedSubPoints=new LinkedList();
+        List<Complex> sortedSubPoints=new ArrayList();
         sortedSubPoints.add(sortedAllPoints.get(i++));
         while(i<sortedAllPoints.size()&&sortedAllPoints.get(i).distSq(sortedSubPoints.get(sortedSubPoints.size()-1))<MAX_DIST){
             sortedSubPoints.add(sortedAllPoints.get(i++));
@@ -169,8 +174,8 @@ void draw(){
 
 
 class Complex{
-    private float real;
-    private float image;
+    public float real;
+    public float image;
     public Complex(){
         real=0;
         image=0;
@@ -190,5 +195,34 @@ class Complex{
     }
     public float distSq(Complex b){
         return (this.real-b.real)*(this.real-b.real)+(this.image-b.image)*(this.image-b.image);
+    }
+}
+class FFT{
+    public void FFT(List<Complex> a){
+        int n=a.size();
+        for(int i= 0,j=0;i<n ;i++){
+            int bit=n>>1;
+            for(;(j&bit)!=0;bit>>=1) j^=bit;
+            j^=bit;
+            if(i<j){
+                Complex tmp=a.get(i);
+                a.set(i,a.get(j));
+                a.set(j,tmp);
+            }
+        }
+        for(int len=2;len<=n;len<<=1){
+            double ang=2*3.1415926535897/len;
+            Complex wlen=new Complex((float)cos((float)ang),(float)sin((float)ang));
+            for(int i=0;i<n;i+=len){
+                Complex w=new Complex(1,0);
+                for(int j=0;j<len/2;j++){
+                    Complex u=a.get(i+j);
+                    Complex v=a.get(i+j+len/2).mul(w);
+                    a.set(i+j,u.add(v));
+                    a.set(i+j+len/2,u.sub(v));
+                    w=w.mul(wlen);
+                }
+            }
+        }
     }
 }
