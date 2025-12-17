@@ -4,11 +4,12 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Comparator;
 
-final int ERASE_RADIUS=1;
-final int GRAD_BOUND=100000;
-final int MAX_DIST=40;
-
-
+final int ERASE_RADIUS=0;
+final int GRAD_BOUND=20000;
+final int MAX_DIST=30;
+final int MIN_POINT_NUM=70;
+final float drawSpeed = 0.02;
+PImage img;
 //定义复数点数组
 List<Complex> allPoints= new LinkedList();
 List<Complex> sortedAllPoints= new LinkedList();
@@ -16,10 +17,13 @@ List<Complex> sortedAllPoints= new LinkedList();
 List<List<Complex>> sortedPoints=new ArrayList();
 List<List<Circle>> circleList= new LinkedList();
 void setup(){
+    smooth(8);
+    pixelDensity(displayDensity());
     //加载图片像素(不要我写这个函数真是太好了)
-    PImage img= loadImage("../img/Tester3.jpg");
+    img= loadImage("../img/Tester3.jpg");
     img.loadPixels();
     img.resize(ceil(img.width/1.5), ceil(img.height/1.5));
+
     // size(img.width,img.height);
     surface.setSize(img.width, img.height);
 
@@ -85,34 +89,145 @@ void setup(){
     // }
 
 
-    //使用破坏性爬虫方法重写,试图解决双层线问题
-    //查找最大的梯度值,仅保留这个梯度值,其余清零
-    for(int x = ERASE_RADIUS; x < img.width - ERASE_RADIUS - 1; x++){
-        for(int y = ERASE_RADIUS; y < img.height - ERASE_RADIUS - 1; y++){
-            if(gradientTable[x][y] > GRAD_BOUND){
-                float maxVal = gradientTable[x][y];
-                int peakX = x;
-                int peakY = y;
-                int searchR = ERASE_RADIUS; 
-                for(int i = -searchR; i <= searchR; i++){
-                    for(int j = -searchR; j <= searchR; j++){
-                        if(x+i >= 0 && x+i < img.width && y+j >= 0 && y+j < img.height){
-                             if(gradientTable[x+i][y+j] > maxVal){
-                                 maxVal = gradientTable[x+i][y+j];
-                                 peakX = x + i;
-                                 peakY = y + j;
-                             }
-                        }
-                    }
-                }
-                allPoints.add(new Complex(peakX, peakY));
-                for(int p = peakX - ERASE_RADIUS; p <= peakX + ERASE_RADIUS; p++){
-                    for(int q = peakY - ERASE_RADIUS; q <= peakY + ERASE_RADIUS; q++){
-                        if(p >= 0 && p < img.width && q >= 0 && q < img.height){
-                           gradientTable[p][q] = 0;
-                        }
-                    }
-                }   
+    // //使用破坏性爬虫方法重写,试图解决双层线问题
+    // //查找最大的梯度值,仅保留这个梯度值,其余清零
+    // for(int x = ERASE_RADIUS; x < img.width - ERASE_RADIUS - 1; x++){
+    //     for(int y = ERASE_RADIUS; y < img.height - ERASE_RADIUS - 1; y++){
+    //         if(gradientTable[x][y] > GRAD_BOUND){
+    //             float maxVal = gradientTable[x][y];
+    //             int peakX = x;
+    //             int peakY = y;
+    //             int searchR = ERASE_RADIUS; 
+    //             for(int i = -searchR; i <= searchR; i++){
+    //                 for(int j = -searchR; j <= searchR; j++){
+    //                     if(x+i >= 0 && x+i < img.width && y+j >= 0 && y+j < img.height){
+    //                          if(gradientTable[x+i][y+j] > maxVal){
+    //                              maxVal = gradientTable[x+i][y+j];
+    //                              peakX = x + i;
+    //                              peakY = y + j;
+    //                          }
+    //                     }
+    //                 }
+    //             }
+    //             allPoints.add(new Complex(peakX-img.width/2, peakY-height/2));
+    //             for(int p = peakX - ERASE_RADIUS; p <= peakX + ERASE_RADIUS; p++){
+    //                 for(int q = peakY - ERASE_RADIUS; q <= peakY + ERASE_RADIUS; q++){
+    //                     if(p >= 0 && p < img.width && q >= 0 && q < img.height){
+    //                        gradientTable[p][q] = 0;
+    //                     }
+    //                 }
+    //             }   
+    //         }
+    //     }
+    // }
+    int[][] binaryMap = new int[img.width][img.height];
+    for (int x = 0; x < img.width; x++) {
+        for (int y = 0; y < img.height; y++) {
+            if (gradientTable[x][y] > GRAD_BOUND) {
+                binaryMap[x][y] = 1;
+            } else {
+                binaryMap[x][y] = 0;
+            }
+        }
+    }
+    int[] dx = {0, 1, 1, 1, 0, -1, -1, -1};
+    int[] dy = {-1, -1, 0, 1, 1, 1, 0, -1};
+    boolean isChanged = true;
+    List<Integer> pointsToDelete = new ArrayList<Integer>();
+
+    while (isChanged) {
+        isChanged = false;
+        
+        // --- 子迭代 1 ---
+        // 删除满足条件 A, B, C1, D1 的像素
+        pointsToDelete.clear();
+        for (int x = 1; x < img.width - 1; x++) {
+            for (int y = 1; y < img.height - 1; y++) {
+                if (binaryMap[x][y] == 0) continue;
+
+                // 获取8邻域像素值
+                int p2 = binaryMap[x + dx[0]][y + dy[0]];
+                int p3 = binaryMap[x + dx[1]][y + dy[1]];
+                int p4 = binaryMap[x + dx[2]][y + dy[2]];
+                int p5 = binaryMap[x + dx[3]][y + dy[3]];
+                int p6 = binaryMap[x + dx[4]][y + dy[4]];
+                int p7 = binaryMap[x + dx[5]][y + dy[5]];
+                int p8 = binaryMap[x + dx[6]][y + dy[6]];
+                int p9 = binaryMap[x + dx[7]][y + dy[7]];
+
+                // 条件A：2 <= B(P1) <= 6，其中 B(P1) 是非零邻居的数量
+                int B = p2 + p3 + p4 + p5 + p6 + p7 + p8 + p9;
+                if (B < 2 || B > 6) continue;
+
+                // 条件B：A(P1) = 1，其中 A(P1) 是邻域序列中 0->1 的跳变次数
+                // 序列顺序 P2, P3, P4, P5, P6, P7, P8, P9, P2
+                int A = 0;
+                if (p2 == 0 && p3 == 1) A++;
+                if (p3 == 0 && p4 == 1) A++;
+                if (p4 == 0 && p5 == 1) A++;
+                if (p5 == 0 && p6 == 1) A++;
+                if (p6 == 0 && p7 == 1) A++;
+                if (p7 == 0 && p8 == 1) A++;
+                if (p8 == 0 && p9 == 1) A++;
+                if (p9 == 0 && p2 == 1) A++;
+                if (A != 1) continue;
+                if (p2 * p4 * p6 != 0) continue;
+                if (p4 * p6 * p8 != 0) continue;
+                pointsToDelete.add(x + y * img.width);
+            }
+        }
+        if (!pointsToDelete.isEmpty()) {
+            isChanged = true;
+            for (Integer idx : pointsToDelete) {
+                binaryMap[idx % img.width][idx / img.width] = 0;
+            }
+        }
+        pointsToDelete.clear();
+        for (int x = 1; x < img.width - 1; x++) {
+            for (int y = 1; y < img.height - 1; y++) {
+                if (binaryMap[x][y] == 0) continue;
+
+                int p2 = binaryMap[x + dx[0]][y + dy[0]];
+                int p3 = binaryMap[x + dx[1]][y + dy[1]];
+                int p4 = binaryMap[x + dx[2]][y + dy[2]];
+                int p5 = binaryMap[x + dx[3]][y + dy[3]];
+                int p6 = binaryMap[x + dx[4]][y + dy[4]];
+                int p7 = binaryMap[x + dx[5]][y + dy[5]];
+                int p8 = binaryMap[x + dx[6]][y + dy[6]];
+                int p9 = binaryMap[x + dx[7]][y + dy[7]];
+
+                int B = p2 + p3 + p4 + p5 + p6 + p7 + p8 + p9;
+                if (B < 2 || B > 6) continue;
+
+                int A = 0;
+                if (p2 == 0 && p3 == 1) A++;
+                if (p3 == 0 && p4 == 1) A++;
+                if (p4 == 0 && p5 == 1) A++;
+                if (p5 == 0 && p6 == 1) A++;
+                if (p6 == 0 && p7 == 1) A++;
+                if (p7 == 0 && p8 == 1) A++;
+                if (p8 == 0 && p9 == 1) A++;
+                if (p9 == 0 && p2 == 1) A++;
+                if (A != 1) continue;
+                if (p2 * p4 * p8 != 0) continue;
+                if (p2 * p6 * p8 != 0) continue;
+
+                pointsToDelete.add(x + y * img.width);
+            }
+        }
+        if (!pointsToDelete.isEmpty()) {
+            isChanged = true;
+            for (Integer idx : pointsToDelete) {
+                binaryMap[idx % img.width][idx / img.width] = 0;
+            }
+        }
+    }
+
+    for (int x = 1; x < img.width - 1; x++) {
+        for (int y = 1; y < img.height - 1; y++) {
+            if (binaryMap[x][y] == 1) {
+                // 保持原有的坐标中心化变换逻辑
+                allPoints.add(new Complex(x - img.width / 2, y - height / 2));
             }
         }
     }
@@ -147,7 +262,7 @@ void setup(){
         if(sortedSubPoints.get(sortedSubPoints.size()-1).distSq(sortedSubPoints.get(0))<MAX_DIST){
             sortedSubPoints.add(sortedSubPoints.get(0));
         }
-        if(sortedSubPoints.size()>10) sortedPoints.add(sortedSubPoints);
+        if(sortedSubPoints.size()>MIN_POINT_NUM) sortedPoints.add(sortedSubPoints);
     }
 
 
@@ -207,10 +322,14 @@ List<List<PVector>> finishedTrails = new ArrayList(); // 存已经画好的轨�
 List<PVector> currentTrail = new ArrayList();         // 存当前正在画的轨迹
 
 void draw() {
-    background(255); 
+    translate(img.width/2, img.height/2);
+    background(20); 
+    
+    strokeWeight(2);
     noFill();
-    stroke(0);
-    strokeWeight(1);
+    strokeJoin(ROUND);
+    strokeCap(ROUND);
+    stroke(0, 255, 255); 
     for (List<PVector> trail : finishedTrails) {
         beginShape();
         for (PVector p : trail) {
@@ -222,23 +341,53 @@ void draw() {
         List<Circle> circles = circleList.get(currentShapeIndex);
         float x = 0;
         float y = 0;
-        for (Circle c : circles) {
+        for(int i = 0; i < circles.size(); i++){
+            Circle c = circles.get(i);
+            float prevX = x;
+            float prevY = y;
             c.theta = c.p + c.f * time; 
             x += (float)(c.a * cos((float)c.theta));
             y += (float)(c.a * sin((float)c.theta));
+            stroke(255, 255, 255, 30); 
+            if(c.a > 1) {
+                ellipse(prevX, prevY, (float)c.a*2, (float)c.a*2);
+                stroke(255, 255, 255, 80); 
+                line(prevX, prevY, x, y);
+            }
         }
         currentTrail.add(new PVector(x, y));
-        stroke(255, 0, 0);
-        strokeWeight(2);
+        stroke(255, 0, 255);
         beginShape();
         for (PVector p : currentTrail) {
             vertex(p.x, p.y);
         }
         endShape();
-        noStroke();
-        fill(255, 0, 0);
-        ellipse(x, y, 5, 5);
-        float drawSpeed = 0.05;
+    }
+    if (currentShapeIndex < circleList.size()) {
+        List<Circle> circles = circleList.get(currentShapeIndex);
+        float x = 0;
+        float y = 0;
+        for(int i=0;i<circles.size();i++){
+            Circle c = circles.get(i);
+            float prevX = x;
+            float prevY = y;
+            c.theta = c.p + c.f * time; 
+            x += (float)(c.a * cos((float)c.theta));
+            y += (float)(c.a * sin((float)c.theta));
+            stroke(255,255,0,map(i,0,circles.size(),255,10));
+            if(c.a>1) {
+                ellipse(prevX,prevY,(float)c.a*2,(float)c.a*2);
+                stroke(255);
+                line(prevX,prevY,x,y);
+            }
+        }
+        currentTrail.add(new PVector(x, y));
+        stroke(0, 0, 255);
+        beginShape();
+        for (PVector p : currentTrail) {
+            vertex(p.x, p.y);
+        }
+        endShape();
         time += drawSpeed;
         if (time >= TWO_PI) {
             finishedTrails.add(new ArrayList(currentTrail));
