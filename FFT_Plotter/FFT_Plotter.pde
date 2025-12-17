@@ -1,17 +1,22 @@
-import java.util.ArrayList;
+import java.util.LinkedList;
 import java.util.List;
 
+
+final int poolSize=5;
 //定义复数点数组
-List<Complex> points=new ArrayList();
+List<Complex> points=new LinkedList();
+List<Complex> sortedPoints=new LinkedList();
 void setup(){
-    smooth(8);
     //加载图片像素(不要我写这个函数真是太好了)
     PImage img= loadImage("../img/Tester2.jpg");
     img.loadPixels();
     // size(img.width,img.height);
-    surface.setSize(img.width, img.height);
-    float [][] grayTable=new float [img.width][img.height];
+    surface.setSize(img.width/poolSize, img.height/poolSize);
 
+
+    float [][] grayTable=new float [img.width][img.height];
+    float [][] gradientTable=new float [img.width][img.height];
+    float [][] pooledTable=new float [img.width/poolSize+5][img.height/poolSize+5];
     //二值化
     for(int x=0;x<img.width;x++){
         for(int y=0;y<img.height;y++){
@@ -46,23 +51,67 @@ void setup(){
                     Gx+=sobelX[p-(x-1)][q-(y-1)]*grayTable[p][q];
                     Gy+=sobelY[p-(x-1)][q-(y-1)]*grayTable[p][q];
                 }
-            }
-            
-            if(Gx*Gx+Gy*Gy>100000){
-                points.add(new Complex(x,y));
-            }
+            }   
+            gradientTable[x][y]=Gx*Gx+Gy*Gy;
+        }
+    }
+    //池化防止双层线
+    for(int x=0;x<img.width-poolSize;x+=poolSize){
+        for(int y=1;y<img.height-poolSize;y+=poolSize){
+            float G=0;
+            for(int p=x;p<x+poolSize;p++){
+                for(int q=y;q<y+poolSize;q++){
+                    G=max(G,gradientTable[p][q]);
+                }
+            }   
+            pooledTable[x/poolSize][y/poolSize]=G;
+        }
+    }
+    //此处可简化(但是为了清晰性保留)(反正只是乘常数)
+    for(int i=0;i<img.width/poolSize;i++){
+        for(int j=0;j<img.height/poolSize;j++){
+            if(pooledTable[i][j]>100000) points.add(new Complex(i,j));
         }
     }
 
-}
 
+    print(points.size());
+    sortedPoints.add(points.get(0));
+    points.remove(0);   
+    //接下来是这个最短临近距离排序
+    //这里是O(N^2) 没一点办法
+    while(!points.isEmpty()){
+        float minDis=Float.MAX_VALUE;
+        Complex tmp=points.get(0);
+        for(Complex p: points){
+            float dis=sortedPoints.get(sortedPoints.size()-1).distSq(p);
+            if(dis<minDis){
+                tmp=p;
+                minDis=dis;
+            }
+        }
+        points.remove(tmp);
+        sortedPoints.add(tmp);
+    }
+
+}
+int drawIndex = 0;
 void draw(){
-    background(255);
-    stroke(0,100);
-    for(int i=0;i<points.size();i++){
-        point(points.get(i).real,points.get(i).image);
+    stroke(0);
+    int speed = 10; 
+    
+    for (int k = 0; k < speed; k++) {
+        if (drawIndex < sortedPoints.size() - 1) {
+            Complex p1 = sortedPoints.get(drawIndex);
+            Complex p2 = sortedPoints.get(drawIndex + 1);
+            
+            line((float)p1.real, (float)p1.image, (float)p2.real, (float)p2.image);
+            
+            drawIndex++;
+        }
     }
 }
+
 
 class Complex{
     private float real;
@@ -83,5 +132,8 @@ class Complex{
     }
     public Complex sub(Complex b){
         return new Complex(this.real-b.real,this.image-b.image);
+    }
+    public float distSq(Complex b){
+        return (this.real-b.real)*(this.real-b.real)+(this.image-b.image)*(this.image-b.image);
     }
 }
